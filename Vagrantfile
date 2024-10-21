@@ -2,6 +2,7 @@ Vagrant.configure("2") do |config|
 
   config.vm.box = "debian/bookworm64"
 
+  # This if you have plugins vagrant-vbguest avoid a eternal loading time 
   config.vbguest.auto_update = false
 
   config.vm.define "earth" do |earth|
@@ -10,9 +11,16 @@ Vagrant.configure("2") do |config|
     earth.vm.hostname = "tierra.sistema.test"
 
     earth.vm.provision "shell", inline: <<-SHELL
-       apt update -y
-       apt-get install -y dnsutils bind9
-     SHELL
+        # Here put program provision
+        apt update -y
+        apt-get install -y dnsutils bind9
+    SHELL
+
+    earth.vm.provision "shell", inline: <<-SHELL
+      # Here put file provision
+      cp /vagrant/config/earth/named.conf.options /etc/bind/named.conf.options
+      cp /vagrant/config/earth/named /etc/default/named
+    SHELL
   end
 
   config.vm.define "venus" do |venus|
@@ -21,8 +29,14 @@ Vagrant.configure("2") do |config|
     venus.vm.hostname = "venus.sistema.test"
 
     venus.vm.provision "shell", inline: <<-SHELL
+      # Here put program provision
       apt update -y
       apt-get install -y dnsutils bind9
-  SHELL
+    SHELL
+
+    
+    venus.vm.provision "shell", inline: <<-SHELL
+      #Here put file provision
+    SHELL
   end
 end
