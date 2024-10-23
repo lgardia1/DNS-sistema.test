@@ -1,29 +1,58 @@
-# DNS-SISTEMA.TEST HomeWorks:
+# DNS-SISTEMA.TEST HomeWorks
+
+## Index
+- [DNS-SISTEMA.TEST HomeWorks](#dns-sistematest-homeworks)
+  - [Index](#index)
+    - [Introduction](#introduction)
+  - [1. GitHub Repository](#1-github-repository)
+  - [2. Configure VMs](#2-configure-vms)
+    - [2.1 Create Vagrantfile](#21-create-vagrantfile)
+    - [2.2 Edit Vagrantfile](#22-edit-vagrantfile)
+    - [2.3 Start Vagrantfile](#23-start-vagrantfile)
+  - [3. Configure Servers](#3-configure-servers)
+    - [3.1 Master Server (Earth)](#31-master-server-earth)
+      - [3.1.1 Listen only on IPv4](#311-listen-only-on-ipv4)
+      - [3.1.2 Enable dnssec-validation and IPv4](#312-enable-dnssec-validation-and-ipv4)
+      - [3.1.3 ACL Configuration](#313-acl-configuration)
+      - [3.1.4 Configure DNS Zone](#314-configure-dns-zone)
+      - [3.1.5 Create Zone Database with alias and mail server](#315-create-zone-database-with-alias-and-mail-server)
+        - [What does "The server marte.sistema.test will act as the mail server for the domain sistema.test" mean?](#what-does-the-server-martesistematest-will-act-as-the-mail-server-for-the-domain-sistematest-mean)
+  - [Author](#author)
+
+
+### Introduction
+
+This documentation gives you the basic setup and configurations needed for setting up DNS servers using Bind9 with Vagrant, along with the proper structure for GitHub repositories and DNS configurations. Feel free to expand further as needed.
+
+
+
+---
 
 ## 1. GitHub Repository
 The first step of the practice involves creating a GitHub repository to manage all the files and configurations necessary for implementing a DNS server using **Vagrant** and network configurations for virtual machines. This repository will be used to version the configuration scripts, documentation, and tests.
 
+---
 
 ## 2. Configure VMs
 
-#### 2.1 Create vagrant file
+### 2.1 Create Vagrantfile
+To start the configuration, you need to create a `Vagrantfile` using the following command:
+
 ```bash
 vagrant init
 ```
 
-#### 2.2 Edit Vagrantfile
+### 2.2 Edit Vagrantfile
+The **Vagrantfile** should be edited to create two VMs: one for the master DNS server (Earth) and the other for the slave DNS server (Venus). The configuration below installs the required packages like **bind9** on both machines.
+
 ```ruby
 Vagrant.configure("2") do |config|
-
   config.vm.box = "debian/bookworm64"
-
   config.vbguest.auto_update = false
 
   config.vm.define "earth" do |earth|
     earth.vm.network "private_network", ip: "192.168.57.103"
-
     earth.vm.hostname = "tierra.sistema.test"
-
     earth.vm.provision "shell", inline: <<-SHELL
        apt update -y
        apt-get install -y dnsutils bind9
@@ -32,190 +61,151 @@ Vagrant.configure("2") do |config|
 
   config.vm.define "venus" do |venus|
     venus.vm.network "private_network", ip: "192.168.57.102"
-
     venus.vm.hostname = "venus.sistema.test"
-
     venus.vm.provision "shell", inline: <<-SHELL
        apt update -y
        apt-get install -y dnsutils bind9
-  SHELL
+     SHELL
   end
 end
-``` 
-In this configuration, we created two VMs-. The first **"earth"**, this will be the master server, and **"venus"** will be slave server. We also installed bind9 in both VMs.
-
-
-#### 2.2 Start Vagrantfile
-```bash
-vagrant up
 ```
 
-## 3. Configure server
-
-### 3.1 Server Master (Earth)
-
-We will SHH into the Master server (Earth)
+### 2.3 Start Vagrantfile
+To start the virtual machines, use the following command:
 ```bash
-vagrant ssh earth
+    vagrant up
+```
+---
+
+## 3. Configure Servers
+
+### 3.1 Master Server (Earth)
+
+#### 3.1.1 Listen only on IPv4
+
+SSH into the Master Server (Earth) and modify the following file:
+```bash
+    vagrant ssh earth
+    sudo nano /etc/default/named
 ```
 
-##### 3.1.2 Protocol IPv4 and dnssec-validation
-
-We go to the directory **`cd /etc/bind`**
-
-###### DNS validaiton yes
-We enable listening the server dnssec-validation yes.
-
-
+Modify the startup options to only listen on IPv4 by adding **-4**:
 ```bash
-sudo nano named.conf.options
+OPTIONS="-u bind -4"
 ```
 
-
-This appears:
+#### 3.1.2 Enable dnssec-validation and IPv4
+Edit the DNS options in the **named.conf.options** file to enable DNSSEC validation and IPv4-only listening.
 ```bash
-options {
-        directory "/var/cache/bind";
-
-        // If there is a firewall between you and nameservers you want
-        // to talk to, you may need to fix the firewall to allow multiple
-        // ports to talk.  See http://www.kb.cert.org/vuls/id/800113
-
-        // If your ISP provided one or more IP addresses for stable
-        // nameservers, you probably want to use them as forwarders.
-        // Uncomment the following block, and insert the addresses replacing
-        // the all-0's placeholder.
-
-        // forwarders {
-        //      0.0.0.0;
-        // 
-        };
+    sudo nano /etc/bind/named.conf.options
 ```
 
-
-So we changed to this:
+Modify it as follows:
 ```bash
-options {
-        directory "/var/cache/bind";
-
-        dnssec-validation yes;//security conf
-
-        listen-on { any; }; //Listening in any IP
-        listen-on-v6 { none; };//Isn't listening on IPv6
-};
+    options {
+            directory "/var/cache/bind";
+            dnssec-validation yes;
+            listen-on { any; }; // Listening on IPv4 only
+            listen-on-v6 { none; }; // Disabling IPv6 listening
+    };
 ```
 
-###### Check configuration:
+Check the configuration:
 ```bash
 sudo named-checkconf
 ```
 
-If there isn't output text, it means everything is fine.
-
-###### Only listen in IPv4
-
+#### 3.1.3 ACL Configuration
+To limit recursive queries to specific networks, configure ACLs in the same **named.conf.options** file:
 ```bash
-sudo nano /etc/default named
+    acl "redes_permitidas" {
+            127.0.0.0/8; // Allow queries from localhost
+            192.168.57.0/24; // Allow queries from the VM network
+    };
+
+    options {
+            recursion yes;
+            directory "/var/cache/bind";
+            dnssec-validation yes;
+            listen-on { any; };
+            listen-on-v6 { none; };
+    };
 ```
 
-Change to this:
+#### 3.1.4 Configure DNS Zone
 ```bash
-# run resolvconf?
-RESOLVCONF=no
-
-# startup options for the server
-OPTIONS="-u bind -4"
-```
-We are adding the param **-4** to listen only in IPv4
-
-##### 3.1.2 ACL configuration
-
-Edit this file
-```bash
-sudo nano named.conf
+Next, we define the DNS zone for tierra.sistema.test in the **named.conf.local** file:
+sudo nano /etc/bind/named.conf.local
 ```
 
-
-Appears this:
+Add the following zone configuration:
 ```bash
-// This is the primary configuration file for the BIND DNS server named.
-//
-// Please read /usr/share/doc/bind9/README.Debian for information on the
-// structure of BIND configuration files in Debian, *BEFORE* you customize
-// this configuration file.
-//
-// If you are just adding zones, please do that in /etc/bind/named.conf.local
-
-include "/etc/bind/named.conf.options";
-include "/etc/bind/named.conf.local";
-include "/etc/bind/named.conf.default-zones";
+    zone "tierra.sistema.test" {
+            type master;
+            file "/etc/bind/zones/db.sistema.test";
+};
 ```
 
+Create the directory for zone files:
+```bash
+    sudo mkdir /etc/bind/zones
+```
+
+Check the configuration again:
+```bash
+    sudo named-checkconf
+```
+
+#### 3.1.5 Create Zone Database with alias and mail server
 
 
+**Edit the DNS zone file (`db.sistema.test`)**:
+```bash
+    sudo nano /etc/bind/zones/db.sistema.test
+```
+Finally, create the zone database file for tierra.sistema.test:
+```bash
+    sudo nano zones/db.sistema.test
+```
 
+In this file, add the necessary DNS records:
+```bash
+$TTL    604800
+;
+;
+;dns an email
+@       IN      SOA     tierra.sistema.test. admin.sistema.test. (
+                              2         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
 
-## 2. Problem Data
+@       IN      NS      tierra.sistema.test.
+;entry dns to ip
+@       IN      A       192.168.57.103
+venus   IN      A       192.168.57.102
+marte   IN      A       192.168.57.104
+mercurio    IN      A       192.168.57.101
 
-### 2.1. Network
-The network used for this practice is **192.168.57.0/24**. All machines, both real and virtual, will be connected to this network.
+; Alias (CNAME)
+ns1     IN      CNAME   tierra.sistema.test.
+ns2     IN      CNAME   venus.sistema.test.
+mail    IN      CNAME   marte.sistema.test.
 
-### 2.2. Equipment
-The following machines will be configured, some real and others fictitious:
+; Mail Exchange (MX)
+@       IN      MX 10   marte.sistema.test.
+```
+##### What does "The server marte.sistema.test will act as the mail server for the domain sistema.test" mean?
 
-| Equipment | FQDN                  | IP               | OS                    |
-|-----------|-----------------------|------------------|-----------------------|
-| Mercury   | mercurio.sistema.test  | 192.168.57.101   | Debian Linux graphical (ficticius)         |
-| Venus     | venus.sistema.test     | 192.168.57.102   | Debian (text) |
-| Earth     | tierra.sistema.test    | 192.168.57.103   | Debian (text) |
-| Mars      | marte.sistema.test     | 192.168.57.104   | Windows graphical (fictitious) |
+This statement means that the server named `marte.sistema.test` will handle email processing for the domain **sistema.test**. In other words, any emails sent to addresses like `user@sistema.test` will be managed and processed by the server `marte.sistema.test`.
 
-## 3. DNS Data
-
-- The DNS server will only listen on IPv4.
-- DNSSEC validation will be enabled (`dnssec-validation yes`).
-- Recursive queries will only be allowed from machines within the networks **127.0.0.0/8** and **192.168.57.0/24**.
-- The master server will be **tierra.sistema.test**, with authority over both forward and reverse zones.
-- **Venus** will act as the slave DNS server, replicating configurations from **tierra.sistema.test**.
-- Negative cache responses will last for two hours (in seconds).
-- Unauthorized queries will be forwarded to the OpenDNS server **208.67.222.222**.
-- The following aliases (CNAME) will be configured:
-  - `ns1.sistema.test` will be an alias for **tierra.sistema.test**.
-  - `ns2.sistema.test` will be an alias for **venus.sistema.test**.
-  - `mail.sistema.test` will be an alias for **marte.sistema.test**.
-
-## 4. Verification
-
-Using tools like `dig` or `nslookup`, the following configurations will be verified:
-
-- Correct resolution of **A** type records.
-- Reverse resolution of IP addresses.
-- Resolution of the aliases **ns1.sistema.test** and **ns2.sistema.test**.
-- Query for the **NS** servers of the **sistema.test** zone.
-- Query for the **MX** records of the **sistema.test** domain.
-- Verification of zone transfer between the master and slave DNS servers (querying the **AXFR** record).
-- Confirmation that both the master and slave servers can respond to the same queries.
-
-## 5. Submission
-
-You need to upload the following files to the Moodle platform:
-
-1. The link to your GitHub repository.
-2. A `.zip` file downloaded from the GitHub repository (this can be downloaded using the "Code" button and then selecting "Download ZIP").
-
-## 6. Evaluation
-
-The evaluation of the practice will be carried out as follows:
-
-- 1 point for the GitHub infrastructure.
-- 1 point for the Vagrant infrastructure.
-- 2 points for the project documentation.
-- 7 points for the DNS configuration, which will be verified by cloning the repository and running the tests using the `test.bat` (Windows) or `test.sh` (Linux) files.
+To configure this correctly, you need to add an **MX (Mail Exchange) record** to your DNS zone file. An MX record specifies the mail server responsible for receiving emails for a particular domain.
 
 ## Author
 
 **Lucas García Díaz**  
-Github: [lgardia1](https://github.com/lgardia1)  
+Github: [github.com/lgardia1](https://github.com/lgardia1)  
 Email: [lgardia026@ieszaidinvergeles.org](lgardia026@ieszaidinvergeles.org)
 
 
