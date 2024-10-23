@@ -18,8 +18,10 @@ Vagrant.configure("2") do |config|
 
     earth.vm.provision "shell", inline: <<-SHELL
       # Here put file provision
-      cp /vagrant/config/earth/named.conf.options /etc/bind/named.conf.options
       cp /vagrant/config/earth/named /etc/default/named
+      cp /vagrant/config/earth/named.conf.options /etc/bind/named.conf.options
+      cp /vagrant/config/earth/named.conf.local /etc/bind/named.conf.local 
+      cp /vagrant/config/earth/db.sistema.test /etc/bind/zones/db.sistema.test
     SHELL
   end
 
