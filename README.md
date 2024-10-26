@@ -4,27 +4,28 @@
 - [DNS-SISTEMA.TEST HomeWorks](#dns-sistematest-homeworks)
   - [Index](#index)
     - [Introduction](#introduction)
-  - [1. Configure VMs](#1-configure-vms)
+  - [1. Setup Workspace](#1-setup-workspace)
     - [1.1 Create Vagrantfile](#11-create-vagrantfile)
     - [1.2 Edit Vagrantfile](#12-edit-vagrantfile)
-    - [1.3 Start Vagrantfile](#13-start-vagrantfile)
+    - [1.3 Directory Tree](#13-directory-tree)
   - [2. Configure Servers](#2-configure-servers)
     - [2.1 General configuration](#21-general-configuration)
       - [2.1.1 Listen only IPv4](#211-listen-only-ipv4)
-      - [3.1.2 Resolution configuration](#312-resolution-configuration)
+      - [2.1.2 Configuration Options](#212-configuration-options)
+        - [Enable dnssec-validation](#enable-dnssec-validation)
+        - [ACL Configuration: Recursive to specific networks](#acl-configuration-recursive-to-specific-networks)
+        - [Forward Server for Non-Authoritative Response](#forward-server-for-non-authoritative-response)
+      - [2.1.3 Resolution configuration](#213-resolution-configuration)
     - [2.2 Master Server (Earth)](#22-master-server-earth)
       - [2.2.1 Set Up general configuration](#221-set-up-general-configuration)
-      - [2.2.2 Configuration Options:Enable dnssec-validation](#222-configuration-optionsenable-dnssec-validation)
-      - [2.2.3 ACL Configuration: Recursive to specific networks](#223-acl-configuration-recursive-to-specific-networks)
-      - [2.2.4 Configuration Options: Forward Server for Non-Authoritative Response](#224-configuration-options-forward-server-for-non-authoritative-response)
-      - [2.2.5 Configure Local: DNS Zone](#225-configure-local-dns-zone)
-      - [2.2.6 Create Zone Direct Database with alias and mail server](#226-create-zone-direct-database-with-alias-and-mail-server)
+      - [2.2.2 Configure Local: DNS Zone](#222-configure-local-dns-zone)
+      - [2.2.3 Create Direct Zone Database with alias and mail server](#223-create-direct-zone-database-with-alias-and-mail-server)
         - [What does "The server marte.sistema.test will act as the mail server for the domain sistema.test" mean?](#what-does-the-server-martesistematest-will-act-as-the-mail-server-for-the-domain-sistematest-mean)
-      - [2.2.7 Create Zone Inverted Database](#227-create-zone-inverted-database)
+      - [2.2.4 Create Reverse Zone Database](#224-create-reverse-zone-database)
     - [2.3 Slave Server (Venus)](#23-slave-server-venus)
       - [2.3.1 Set Up General Configuration](#231-set-up-general-configuration)
-      - [2.3.2 Imports Configuration from Master Server](#232-imports-configuration-from-master-server)
-      - [2.3.3 Configure DNS Zone](#233-configure-dns-zone)
+      - [2.3.2 Configure Local: DNS Zone](#232-configure-local-dns-zone)
+      - [2.3.3 Configure DNS Database](#233-configure-dns-database)
   - [3 Check configuration](#3-check-configuration)
     - [3.1 Check configuration](#31-check-configuration)
     - [3.2 Check zones configuration](#32-check-zones-configuration)
@@ -46,7 +47,7 @@ This documentation gives you the basic setup and configurations needed for setti
 
 ---
 
-## 1. Configure VMs
+## 1. Setup Workspace
 
 ### 1.1 Create Vagrantfile
 To start the configuration, you need to create a `Vagrantfile` using the following command:
@@ -81,11 +82,11 @@ Vagrant.configure("2") do |config|
       # Here put file provision
       cp -v /vagrant/config/resolution/resolv.conf /etc/ # Save DNS IPv4 resolution
       cp -v /vagrant/config/default/named /etc/default/named # Save IPv4 listening only enable  
-      cp -v /vagrant/config/earth/named.conf.options /etc/bind/named.conf.options #  Save options of dns
-      cp -v /vagrant/config/earth/named.conf.local /etc/bind/named.conf.local # Save direct zone and inverted zone
+      cp -v /vagrant/config/options/named.conf.options /etc/bind/named.conf.options #  Save options of dns
+      cp -v /vagrant/config/earth/named.conf.local /etc/bind/named.conf.local # Save direct zone and reverse zone
       mkdir -p /etc/bind/zones # If exist make directory zones
       cp -v /vagrant/config/earth/db.sistema.test /etc/bind/zones/db.sistema.test # Save databse direct zone
-      cp -v /vagrant/config/earth/db.192.168.57 /etc/bind/zones/db.192.168.57 # Save databse inverted zone
+      cp -v /vagrant/config/earth/db.192.168.57 /etc/bind/zones/db.192.168.57 # Save databse reverse zone
       sudo systemctl restart bind9 # Restart configuration
     SHELL
   end
@@ -107,7 +108,7 @@ Vagrant.configure("2") do |config|
       cp -v /vagrant/config/resolution/resolv.conf /etc/ # Save DNS IPv4 resolution
       cp -v /vagrant/config/default/named /etc/default/ # Save IPv4 listening only enable  
       cp -v /vagrant/config/venus/named.conf.local /etc/bind/
-      cp -v /vagrant/config/venus/named.conf.options /etc/bind/
+      cp -v /vagrant/config/options/named.conf.options /etc/bind/
       mkdir -p /etc/bind/zones # If exist make directory zones
       touch /etc/bind/zones/db.sistema.test # Create empty direct zone file  
       touch /etc/bind/zones/db.192.168.57 # Create empty direct zone file  
@@ -120,12 +121,30 @@ end
 
 ```
 
-### 1.3 Start Vagrantfile
 To start the virtual machines, use the following command:
 ```bash
     vagrant up
 ```
----
+
+### 1.3 Directory Tree
+
+In the same directory, you must have the following organization:
+```
+                        .
+                        ├── README.md
+                        ├── Vagrantfile
+                        ├── .vagrant
+                        │        └── ...
+                        └── config
+                                ├── options
+                                │       └── ...
+                                ├── defautl
+                                │       └── ...
+                                ├── earth
+                                │      └── ...
+                                └── venus
+                                        └── ...
+```
 
 ## 2. Configure Servers
 
@@ -138,27 +157,9 @@ Modify the startup options to only listen on IPv4 by adding **`-4`**:
 OPTIONS="-u bind -4"
 ```
 
-#### 3.1.2 Resolution configuration
+#### 2.1.2 Configuration Options
 
-Make sure that your resolution configuration is well done.
- 
-Edit *(`resolv.conf`)*:
-```bash
-    sudo nano /etc/resolv.conf
-```
-The *`nameserver`* will be the DNS server that resolves the names.
-```bash
-    sudo nameserver=192.168.57.103
-```
-
-
-### 2.2 Master Server (Earth)
-
-#### 2.2.1 Set Up general configuration
-
-[Here you can find out general configuration](#31-general-configuration)
-
-#### 2.2.2 Configuration Options:Enable dnssec-validation
+##### Enable dnssec-validation
 
 Edit the DNS options in the **named.conf.options** file to enable DNSSEC validation:
 ```bash
@@ -169,48 +170,36 @@ Modify it as follows:
 ```bash
     options {
             directory "/var/cache/bind";
-            dnssec-validation yes;
+            dnssec-validation yes; // dnssec-validation enable 
             listen-on { any; }; // Listening any ip
             listen-on-v6 { none; }; // Disabling IPv6 listening
     };
 ```
 
-#### 2.2.3 ACL Configuration: Recursive to specific networks
+##### ACL Configuration: Recursive to specific networks
 
 To limit recursive queries to specific networks, configure ACLs in the same **named.conf.options** file:
 ```bash
     sudo nano /etc/bind/named.conf.options
 ```
 
-Modify it as follows:
+Add it as follows:
 ```bash
     acl "allow_networks" {
             127.0.0.0/8; // Allow queries from localhost
             192.168.57.0/24; // Allow queries from the VM network
     };
-
-    options {
-            recursion yes;
-            directory "/var/cache/bind";
-            dnssec-validation yes;
-            listen-on { any; };
-            listen-on-v6 { none; };
-    };
 ```
 
-#### 2.2.4 Configuration Options: Forward Server for Non-Authoritative Response
+##### Forward Server for Non-Authoritative Response
 
 Edit the DNS options in the **named.conf.options** file:
+
 ```bash
     sudo nano /etc/bind/named.conf.options
 ```
 Modify it as follows:
 ```bash
-    acl "allow_networks" {
-            127.0.0.0/8; // Allow queries from localhost
-            192.168.57.0/24; // Allow queries from the VM network
-    };
-
     options {
             recursion yes;
             directory "/var/cache/bind";
@@ -226,9 +215,35 @@ Modify it as follows:
     };
 ```
 
-#### 2.2.5 Configure Local: DNS Zone
 
-Next, we define the DNS zone for tierra.sistema.test and his inverted zone in the **named.conf.local** file:
+#### 2.1.3 Resolution configuration
+
+Make sure that your resolution configuration is well done.
+ 
+Edit *(`resolv.conf`)*:
+```bash
+    sudo nano /etc/resolv.conf
+```
+The *`nameserver`* will be the DNS server that resolves the names.
+```bash
+    sudo nameserver=192.168.57.103 // (IPv4 Master Server)
+```
+
+
+### 2.2 Master Server (Earth)
+
+We enter into our **master server**:
+```bash
+    vagrant ssh earth
+```
+
+#### 2.2.1 Set Up general configuration
+
+[Here you can find out general about configuration](#31-general-configuration)
+
+#### 2.2.2 Configure Local: DNS Zone
+
+Next, we define the DNS zone for tierra.sistema.test and his reverse zone in the **named.conf.local** file:
 ```bash
 sudo nano /etc/bind/named.conf.local
 ```
@@ -250,7 +265,7 @@ Create the directory for zone files:
     sudo mkdir /etc/bind/zones
 ```
 
-#### 2.2.6 Create Zone Direct Database with alias and mail server
+#### 2.2.3 Create Direct Zone Database with alias and mail server
 
 **Create the DNS zone file (`db.sistema.test`)**:
 ```bash
@@ -272,12 +287,15 @@ $TTL    604800
                          604800         ; Refresh
                           86400         ; Retry
                         2419200         ; Expire
-                         604800 )       ; Negative Cache TTL
+                           7200 )       ; Negative Cache TTL 2 hours
 
+;Name server record (NS)
 @       IN      NS      tierra.sistema.test.
-;entry dns to ip
-@       IN      A       192.168.57.103
+
+;Addres record (A)
 venus   IN      A       192.168.57.102
+@       IN      A       192.168.57.103
+tierra  IN      A       192.168.57.103
 marte   IN      A       192.168.57.104
 mercurio    IN      A       192.168.57.101
 
@@ -295,7 +313,7 @@ This statement means that the server named `marte.sistema.test` will handle emai
 
 To configure this correctly, you need to add an **MX (Mail Exchange) record** to your DNS zone file. An MX record specifies the mail server responsible for receiving emails for a particular domain.
 
-#### 2.2.7 Create Zone Inverted Database
+#### 2.2.4 Create Reverse Zone Database
 
 **Create the DNS zone file (`db.192.168.57`)**:
 ```bash
@@ -314,11 +332,12 @@ $TTL    604800
                          604800         ; Refresh
                           86400         ; Retry
                         2419200         ; Expire
-                         604800 )       ; Negative Cache TTL
+                           7200 )       ; Negative Cache TTL 2 hours
 
+; Name Server (NS)
 @       IN      NS      tierra.sistema.test.
 
-; Registros PTR (inversos)
+; Pointer record (PTR)
 101     IN      PTR     mercurio.sistema.test.
 102     IN      PTR     venus.sistema.test.
 103     IN      PTR     tierra.sistema.test.
@@ -327,27 +346,18 @@ $TTL    604800
 
 ### 2.3 Slave Server (Venus)
 
-#### 2.3.1 Set Up General Configuration
-
-[Here you can find out general configuration](#31-general-configuration)
-
-#### 2.3.2 Imports Configuration from Master Server
-
-With the provision we can imports part of config from the master server.
-
-We will imports general configuration:
-```ruby
-    venus.vm.provision "shell", inline: <<-SHELL
-      cp /vagrant/config/default/named /etc/default/
-      cp /vagrant/config/resolution/resolv.conf /etc/
-    SHELL
+We enter into our **slave server**:
+```bash
+    vagrant ssh venus
 ```
 
+#### 2.3.1 Set Up General Configuration
 
+[Here you can find out about general configuration](#21-general-configuration)
 
-#### 2.3.3 Configure DNS Zone
+#### 2.3.2 Configure Local: DNS Zone
 
-So, we are going create two zone like master server, sistema.test and inverted.
+So, we are going create two zone like master server, direct and reverse zones.
 ```bash
     sudo nano /etc/bind/named.conf.local
 ```
@@ -365,15 +375,13 @@ zone "57.168.192.in-addr.arpa" {
         masters { 192.168.57.103; }; # IP DNS master
 };
 ```
+#### 2.3.3 Configure DNS Database
 
-Check configuration
-```bash
-    sudo named-checkconf
-```
+This part, just only create empty database with the commnad **(`touch`)**:
 
-Save configuration
 ```bash
-    cp /etc/bind/named.conf.local /vagrant/config/venus/
+    touch /etc/bind/zones/db.sistema.test
+    touch /etc/bind/zones/db.192.168.57
 ```
 
 ## 3 Check configuration
@@ -399,7 +407,7 @@ Output:
     OK
 ```
 
-***Inverted Zone***
+***Reverse Zone***
 ```bash
     sudo named-checkzone 57.168.192.in-addr.arpa /etc/bind/zones/db.192.162.57
 ```
@@ -429,7 +437,7 @@ Output:
     Address: 192.168.57.103
 ```
 
-***Inverted Zone***
+***Reverse Zone***
 ```bash
     nslookup 192.168.57.102
 ```
@@ -441,7 +449,7 @@ Output:
 
 > ⚠️ **Warning**: Make sure that your resolution configuration is well done.
 > 
->    To have it well configured check **[Resolution Configuration](#312-resolution-configuration)**
+>    To have it well configured check: **[Resolution Configuration](#213-resolution-configuration)**
 
 
 
@@ -455,11 +463,11 @@ At the end of to set up your Master/Slave enviroment, save configuration of all 
 ```bash
     cp /etc/resolv.conf /vagrant/config/resolution/
     cp /etc/default/named /vagrant/config/default/
+    cp /etc/bind/named.conf.options /vagrant/config/options/
 ```
 
 ##### Files Master
 ```bash
-    cp /etc/bind/named.conf.options /vagrant/config/earth/
     cp /etc/bind/named.conf.local /vagrant/config/earth/
     cp /etc/bind/zones/db.sistema.test /vagrant/config/earth/
     cp /etc/bind/zones/db.192.168.57 /vagrant/config/earth/
@@ -467,7 +475,6 @@ At the end of to set up your Master/Slave enviroment, save configuration of all 
 
 ##### Files Slave
 ```bash
-    cp /etc/bind/named.conf.options /vagrant/config/venus/
     cp /etc/bind/named.conf.local /vagrant/config/venus/
     cp /etc/bind/zones/db.sistema.test /vagrant/config/venus/
     cp /etc/bind/zones/db.192.168.57 /vagrant/config/venus/
@@ -475,7 +482,7 @@ At the end of to set up your Master/Slave enviroment, save configuration of all 
 
 #### VagrantFile provision will be like this:
 
-Make your sure of **create necessary directory** (like zones directory) and restart **bind9** 
+Make your sure of **create necessary directory** (like zones directory) and restart **bind9** .
 
 ##### Master
 ```bash
@@ -483,11 +490,11 @@ earth.vm.provision "shell", inline: <<-SHELL
   # Here put file provision
   cp -v /vagrant/config/resolution/resolv.conf /etc/ # Save DNS IPv4 resolution
   cp -v /vagrant/config/default/named /etc/default/named # Save IPv4 listening only enable  
-  cp -v /vagrant/config/earth/named.conf.options /etc/bind/named.conf.options # Save DNS options
-  cp -v /vagrant/config/earth/named.conf.local /etc/bind/named.conf.local # Save direct zone and inverted zone
+  cp -v /vagrant/config/options/named.conf.options /etc/bind/named.conf.options # Save DNS options
+  cp -v /vagrant/config/earth/named.conf.local /etc/bind/named.conf.local # Save direct zone and reverse zone
   mkdir -p /etc/bind/zones # If exist make directory zones
   cp -v /vagrant/config/earth/db.sistema.test /etc/bind/zones/db.sistema.test # Save databse direct zone
-  cp -v /vagrant/config/earth/db.192.168.57 /etc/bind/zones/db.192.168.57 # Save databse inverted zone
+  cp -v /vagrant/config/earth/db.192.168.57 /etc/bind/zones/db.192.168.57 # Save databse reverse zone
   sudo systemctl restart bind9 # Restart configuration
 SHELL
 ```
@@ -498,14 +505,15 @@ venus.vm.provision "shell", inline: <<-SHELL
   #Here put file provision
   cp -v /vagrant/config/resolution/resolv.conf /etc/ # Save DNS IPv4 resolution
   cp -v /vagrant/config/default/named /etc/default/ # Save IPv4 listening only enable
-  cp -v /vagrant/config/venus/named.conf.options /etc/bind/ # Save DNS options 
-  cp -v /vagrant/config/venus/named.conf.local /etc/bind/ # Save direct zone and inverted zone
+  cp -v /vagrant/config/options/named.conf.options /etc/bind/ # Save DNS options 
+  cp -v /vagrant/config/venus/named.conf.local /etc/bind/ # Save direct zone and reverse zone
   mkdir -p /etc/bind/zones # If exist make directory zones
   touch /etc/bind/zones/db.sistema.test # Create empty direct zone file  
   touch /etc/bind/zones/db.192.168.57 # Create empty direct zone file  
   sudo systemctl restart bind9 # Restart configuration
 SHELL
 ```
+
 ## Author
 
 **Lucas García Díaz**  
