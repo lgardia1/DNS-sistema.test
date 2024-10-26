@@ -1,5 +1,0 @@
-zone "tierra.sistema.test" {
-	type master;
-	file "/etc/bind/zones/db.sistema.test";
-};
-
