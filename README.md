@@ -30,6 +30,7 @@
     - [3.1 Check configuration](#31-check-configuration)
     - [3.2 Check zones configuration](#32-check-zones-configuration)
     - [3.3 Check Name Resolution](#33-check-name-resolution)
+    - [3.3 Check Name With Script](#33-check-name-with-script)
     - [4 Save configuration](#4-save-configuration)
       - [Save files:](#save-files)
         - [General](#general)
@@ -239,7 +240,7 @@ We enter into our **master server**:
 
 #### 2.2.1 Set Up general configuration
 
-[Here you can find out general about configuration](#31-general-configuration)
+[Here you can find out general about configuration](#21-general-configuration)
 
 #### 2.2.2 Configure Local: DNS Zone
 
@@ -450,6 +451,49 @@ Output:
 > ⚠️ **Warning**: Make sure that your resolution configuration is well done.
 > 
 >    To have it well configured check: **[Resolution Configuration](#213-resolution-configuration)**
+
+### 3.3 Check Name With Script
+
+With that script you can check all configuration in one line of command.
+
+```shell
+    #!/bin/bash -x
+    #
+    # USAGE: ./test.sh <nameserver-ip>
+    #
+
+    # Salir si algún comando falla
+    set -euo pipefail
+
+    function resolver () {
+        dig $nameserver +short $@
+    }
+
+    nameserver=@$1
+
+    resolver mercurio.sistema.test
+    resolver venus.sistema.test
+    resolver tierra.sistema.test
+    resolver marte.sistema.test
+
+    resolver ns1.sistema.test
+    resolver ns2.sistema.test
+
+    resolver sistema.test mx
+
+    resolver sistema.test ns
+
+    resolver -x 192.168.57.101
+    resolver -x 192.168.57.102
+    resolver -x 192.168.57.103
+    resolver -x 192.168.57.104
+```
+
+To execute it put this command like that:
+
+```bash
+  ./nameScript IPv4DNSServer
+```
 
 
 
